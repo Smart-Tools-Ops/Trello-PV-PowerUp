@@ -1,4 +1,6 @@
-# smart nachhaltig – Projektdaten Power-Up für Trello
+Dieses PowerUp wurde mir Claude erstellt und ist für ein Privates Board gestaltet.
+
+# Projektdaten Power-Up für Trello
 
 Ein privates, kostenloses Trello Power-Up, das auf jeder Karte ein Projektdaten-Formular
 (Personalien + Planung) einblendet. Struktur, Bezeichnungen, Farben und Dropdown-Optionen
@@ -14,7 +16,7 @@ werden boardweit im Backend gepflegt; die ausgefüllten Werte werden pro Karte g
 - `style.css` – gemeinsames Design (inkl. automatischem Dunkelmodus)
 - `icon.svg` – Icon für Kartenbereich und Board-Buttons
 
-Alle Dateien gehören zusammen in **denselben Ordner** (das Repository-Wurzelverzeichnis).
+Alle Dateien gehören zusammen in **den selben Ordner** (das Repository-Wurzelverzeichnis).
 
 ## Schritt 1 – Auf GitHub Pages hochladen (kostenlos)
 
