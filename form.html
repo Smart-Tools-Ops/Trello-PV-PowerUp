@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./style.css">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <title>Projektdaten</title>
+</head>
+<body>
+  <div class="wrap" id="app"></div>
+
+<script src="./config.js"></script>
+<script>
+  var t = TrelloPowerUp.iframe();
+  var config = null, data = {}, dirty = false, statusEl = null, saveBtn = null;
+
+  function el(tag, cls, txt){ var e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
+  function markDirty(){ dirty=true; if(statusEl){ statusEl.textContent='● Nicht gespeichert'; statusEl.className='status dirty'; } if(saveBtn) saveBtn.disabled=false; }
+
+  function makeInput(key, type){
+    var i = document.createElement(type==='textarea' ? 'textarea' : 'input');
+    if(type && type!=='textarea') i.type=type; else if(!type) i.type='text';
+    if(type==='textarea') i.rows=4;
+    i.value = data[key] || '';
+    i.addEventListener('input', function(){ data[key]=i.value; markDirty(); });
+    return i;
+  }
+  function makeSelect(key, options){
+    var s = document.createElement('select');
+    s.appendChild(new Option('— bitte wählen —',''));
+    (options||[]).forEach(function(o){ s.appendChild(new Option(o,o)); });
+    if(data[key] && (options||[]).indexOf(data[key])>-1) s.value=data[key];
+    s.addEventListener('change', function(){ data[key]=s.value; markDirty(); });
+    return s;
+  }
+  function makeNumber(key){
+    var i=document.createElement('input'); i.type='number'; i.min='0'; i.inputMode='numeric'; i.placeholder='0';
+    i.value = data[key]!=null ? data[key] : '';
+    i.addEventListener('input', function(){ data[key]=i.value; markDirty(); });
+    return i;
+  }
+  function fieldWrap(labelText, inputEl){ var f=el('div','field'); f.appendChild(el('label',null,labelText)); f.appendChild(inputEl); return f; }
+
+  function collapseRow(headingText, targetBuilder){
+    var row=el('div','section-heading-row');
+    row.appendChild(el('h2','section-heading',headingText));
+    var btn=el('button','collapse-btn','▾'); btn.title='Ein-/ausklappen'; row.appendChild(btn);
+    var body=el('div','collapsible');
+    targetBuilder(body);
+    btn.addEventListener('click', function(){ var c=body.classList.toggle('collapsed'); btn.classList.toggle('collapsed',c); t.sizeTo('#app'); });
+    return [row, body];
+  }
+
+  function render(){
+    var app=document.getElementById('app'); app.innerHTML='';
+
+    // Kopf mit Master-Collapse
+    var head=el('div','head');
+    head.appendChild(el('span','icon','▤'));
+    head.appendChild(el('span','title', config.headings.projekt || 'Projektdaten'));
+    var masterBtn=el('button','collapse-btn','▾'); masterBtn.title='Alles ein-/ausklappen'; head.appendChild(masterBtn);
+    app.appendChild(head);
+
+    var content=el('div','body');
+    masterBtn.addEventListener('click', function(){ var c=content.classList.toggle('collapsed'); masterBtn.classList.toggle('collapsed',c); t.sizeTo('#app'); });
+
+    // ---- Personalien ----
+    var pers=collapseRow(config.headings.personalien || 'Personalien', function(body){
+      var box=el('div','plan-group g-'+(config.personalien.color||'gray'));
+      var rowsHtml = PERSONALIEN_FIELDS;
+      for(var i=0;i<rowsHtml.length;i+=2){
+        var a=rowsHtml[i], b=rowsHtml[i+1];
+        var cls='grid2';
+        if(a.width==='w75' && b && b.width==='w25') cls='grid2 grid-3-1';
+        if(a.width==='w25' && b && b.width==='w75') cls='grid2 grid-1-3';
+        var g=el('div',cls);
+        g.appendChild(buildPersField(a));
+        if(b) g.appendChild(buildPersField(b));
+        box.appendChild(g);
+      }
+      body.appendChild(box);
+    });
+    content.appendChild(pers[0]); content.appendChild(pers[1]);
+
+    // ---- Planung ----
+    var plan=collapseRow(config.headings.planung || 'Planung', function(body){
+      config.groups.forEach(function(grp){
+        var box=el('div','plan-group g-'+(grp.color||'gray')); 
+        box.appendChild(el('h3','subheading', grp.title));
+        grp.rows.forEach(function(r){
+          var g=el('div','grid2 grid-plan');
+          g.appendChild(fieldWrap(r.label, makeSelect(r.key, r.options)));
+          g.appendChild(fieldWrap(r.countLabel, makeNumber(r.key+'_anzahl')));
+          box.appendChild(g);
+        });
+        body.appendChild(box);
+      });
+    });
+    content.appendChild(plan[0]); content.appendChild(plan[1]);
+
+    // ---- Zusatzfelder (nicht im CSV) ----
+    var extra=el('div','extra-box');
+    EXTRA_FIELDS.forEach(function(f){
+      extra.appendChild(fieldWrap(f.label, makeInput(f.key, f.type)));
+    });
+    content.appendChild(extra);
+
+    app.appendChild(content);
+
+    // ---- Speicherleiste ----
+    var bar=el('div','savebar');
+    saveBtn=el('button','btn btn-primary','💾 Speichern'); saveBtn.disabled=true;
+    statusEl=el('span','status saved','Gespeichert'); 
+    saveBtn.addEventListener('click', doSave);
+    bar.appendChild(saveBtn); bar.appendChild(statusEl);
+    app.appendChild(bar);
+
+    t.sizeTo('#app');
+  }
+
+  function buildPersField(f){
+    if(f.type==='anrede') return fieldWrap(f.label, makeSelect('anrede', config.personalien.anrede));
+    return fieldWrap(f.label, makeInput(f.key, f.type));
+  }
+
+  function doSave(){
+    saveBtn.disabled=true;
+    statusEl.textContent='Speichere…'; statusEl.className='status';
+    saveCardData(t, data).then(function(){
+      dirty=false;
+      statusEl.textContent='Gespeichert ✓'; statusEl.className='status saved';
+    }).catch(function(){
+      statusEl.textContent='Fehler beim Speichern'; statusEl.className='status dirty';
+      saveBtn.disabled=false;
+    });
+  }
+
+  function init(){
+    Promise.all([ loadConfig(t), loadCardData(t) ]).then(function(res){
+      config=res[0]; data=res[1] || {};
+      render();
+    });
+  }
+
+  t.render(function(){ t.sizeTo('#app'); });
+  init();
+</script>
+</body>
+</html>
