@@ -83,6 +83,26 @@
     });
     content.appendChild(pers[0]); content.appendChild(pers[1]);
 
+    // ---- Eckdaten ----
+    var eck=collapseRow(config.headings.eckdaten || 'Eckdaten', function(body){
+      var box=el('div','plan-group g-'+((config.eckdaten && config.eckdaten.color) || 'teal'));
+      var i=0;
+      while(i<ECKDATEN_FIELDS.length){
+        var w=ECKDATEN_FIELDS[i].width;
+        var cap = w===25?4 : w===33?3 : w===50?2 : 1;
+        var g=el('div','grid-eck eck-'+w);
+        var n=0;
+        while(i<ECKDATEN_FIELDS.length && ECKDATEN_FIELDS[i].width===w && n<cap){
+          var f=ECKDATEN_FIELDS[i];
+          g.appendChild(fieldWrap(f.label, makeInput(f.key,'text')));
+          i++; n++;
+        }
+        box.appendChild(g);
+      }
+      body.appendChild(box);
+    });
+    content.appendChild(eck[0]); content.appendChild(eck[1]);
+
     // ---- Planung ----
     var plan=collapseRow(config.headings.planung || 'Planung', function(body){
       config.groups.forEach(function(grp){
