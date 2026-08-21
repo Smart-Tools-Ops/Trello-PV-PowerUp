@@ -43,6 +43,25 @@ var PERSONALIEN_FIELDS = [
   { key:'stadt',        label:'Stadt',        type:'text',   width:'w75' }
 ];
 
+/* Eckdaten-Box zwischen Personalien und Planung. Reine Textfelder, eigene Schlüssel.
+   width: 25 | 33 | 50 | 100 (Prozent) – bestimmt, wie viele Felder pro Zeile stehen. */
+var ECKDATEN_FIELDS = [
+  { key:'sparrenstaerke',       label:'Sparrenstärke',                width:25 },
+  { key:'sparrenabstand',       label:'Sparrenabstand',               width:25 },
+  { key:'ersatz_dachziegel',    label:'Ersatz Dachziegel',            width:25 },
+  { key:'ziegelmasse',          label:'Ziegelmaße',                   width:25 },
+  { key:'ziegelart',            label:'Ziegelart',                    width:33 },
+  { key:'zweite_ebene',         label:'Zweite wasserführende Ebene',  width:33 },
+  { key:'strompreis',           label:'Strompreis',                   width:33 },
+  { key:'netzbetreiber',        label:'Netzbetreiber',                width:33 },
+  { key:'jahresverbrauch',      label:'Jahres Verbrauch',             width:33 },
+  { key:'waermepumpenverbrauch',label:'Wärmepumpenverbrauch',         width:33 },
+  { key:'eck_schaltschrank',    label:'Schaltschrank',                width:50 },
+  { key:'zukunftsplaene',       label:'Zukunftspläne',                width:50 },
+  { key:'kabelwege',            label:'Kabelwege',                    width:100 },
+  { key:'zusaetzliches',        label:'Zusätzliches',                 width:100 }
+];
+
 /* Zusatzfelder unter dem Formular – NICHT im CSV-Export enthalten. */
 var EXTRA_FIELDS = [
   { key:'abstand_wr_ssk', label:'Abstand Wechselrichter – Schaltschrank:', type:'text' },
