@@ -1,4 +1,5 @@
 :root{
+  color-scheme: light dark;
   --accent:#1f7a4d;--accent-soft:rgba(31,122,77,.16);
   --ink:#1b2733;--muted:#5a6b7b;--line:#d7dce1;--line-strong:#c3cbd3;
   --field-bg:#ffffff;--page-bg:#ffffff;--section-bg:#ffffff;
@@ -33,6 +34,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .grid-plan{grid-template-columns:2.1fr 1fr}
 .grid-3-1{grid-template-columns:3fr 1fr}
 .grid-1-3{grid-template-columns:1fr 3fr}
+.grid-eck{display:grid;gap:12px 14px;margin-bottom:12px}
+.grid-eck:last-child{margin-bottom:0}
+.eck-25{grid-template-columns:repeat(4,1fr)}
+.eck-33{grid-template-columns:repeat(3,1fr)}
+.eck-50{grid-template-columns:repeat(2,1fr)}
+.eck-100{grid-template-columns:1fr}
 .field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .field label{font-size:12px;font-weight:600;color:var(--muted)}
 .field input,.field select,.field textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--field-bg);
@@ -107,4 +114,4 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .head-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
 .head-field{margin-bottom:12px}
 
-@media (max-width:520px){.grid2,.grid-plan,.grid-3-1,.grid-1-3{grid-template-columns:1fr}}
+@media (max-width:520px){.grid2,.grid-plan,.grid-3-1,.grid-1-3{grid-template-columns:1fr}.eck-25,.eck-33{grid-template-columns:1fr 1fr}.eck-50{grid-template-columns:1fr}}
