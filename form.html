@@ -207,10 +207,8 @@
     if(t.sizeTo) t.sizeTo('#app');
 
     if(keyMissing()){ status.textContent='Es ist kein API-Key in config.js hinterlegt.'; return; }
-    getStoredToken(t).then(function(token){
-      if(token){ loadBoardsInline(status, body, sb); }
-      else { showManualAuth(status, body, sb); }
-    }).catch(function(e){ status.textContent='Fehler: '+e.message; });
+    if(getStoredToken()){ loadBoardsInline(status, body, sb); }
+    else { showManualAuth(status, body, sb); }
   }
 
   function showManualAuth(status, body, sb){
@@ -229,9 +227,9 @@
     save.addEventListener('click', function(){
       var tok=(inp.value||'').trim();
       if(!tok){ status.textContent='Bitte den Code einfügen.'; return; }
-      save.disabled=true; status.textContent='Speichere Code…';
-      setStoredToken(t, tok).then(function(){ body.innerHTML=''; loadBoardsInline(status, body, sb); })
-        .catch(function(e){ status.textContent='Fehler: '+e.message; save.disabled=false; });
+      status.textContent='Speichere Code…';
+      if(!setStoredToken(tok)){ status.textContent='Browser-Speicher blockiert. Bitte Website-Daten/Cookies für diese Seite erlauben und erneut versuchen.'; return; }
+      body.innerHTML=''; loadBoardsInline(status, body, sb);
     });
   }
 
@@ -293,32 +291,30 @@
 
   function runSync(sb, bSync, bStop, st){
     if(keyMissing()){ st.textContent='Es ist kein API-Key in config.js hinterlegt.'; return; }
+    if(!getStoredToken()){
+      st.textContent='Einmalige Freigabe nötig – bitte „Synchronisation starten" öffnen und den Code eintragen.';
+      return;
+    }
     bSync.disabled=true; bStop.disabled=true; st.textContent='Prüfe…';
-    getStoredToken(t).then(function(tok){
-      if(!tok){
-        st.textContent='Einmalige Freigabe nötig – bitte „Synchronisation starten" öffnen und den Code eintragen.';
-        bSync.disabled=false; bStop.disabled=false; return;
+    var pluginId=t.getContext().plugin, link=currentLink;
+    Promise.all([ getCore(t, cardId), getCore(t, link.partner) ]).then(function(cores){
+      var cur=cores[0], par=cores[1];
+      var curNewer=new Date(cur.dateLastActivity)>=new Date(par.dateLastActivity);
+      var target=curNewer?par:cur, targetId=curNewer?link.partner:cardId;
+      var lastSync=link.lastSyncAt?new Date(link.lastSyncAt):new Date(0);
+      var pending={ source: curNewer?cur:par, target:target, targetId:targetId };
+      if(new Date(target.dateLastActivity) > lastSync){
+        st.textContent='Achtung: Die andere Karte wurde seit dem letzten Abgleich geändert – die neuere Version gewinnt.';
+        var cw=el('div','syncbar-btns'); cw.style.marginTop='8px';
+        var yes=el('button','btn btn-primary','Trotzdem übernehmen');
+        var no=el('button','btn btn-ghost','Abbrechen');
+        cw.appendChild(yes); cw.appendChild(no); st.parentNode.appendChild(cw);
+        if(t.sizeTo) t.sizeTo('#app');
+        yes.addEventListener('click', function(){ cw.remove(); applySync(pending, pluginId, link, st, sb); });
+        no.addEventListener('click', function(){ cw.remove(); bSync.disabled=false; bStop.disabled=false; st.textContent=''; });
+      } else {
+        applySync(pending, pluginId, link, st, sb);
       }
-      var pluginId=t.getContext().plugin, link=currentLink;
-      return Promise.all([ getCore(t, cardId), getCore(t, link.partner) ]).then(function(cores){
-        var cur=cores[0], par=cores[1];
-        var curNewer=new Date(cur.dateLastActivity)>=new Date(par.dateLastActivity);
-        var target=curNewer?par:cur, targetId=curNewer?link.partner:cardId;
-        var lastSync=link.lastSyncAt?new Date(link.lastSyncAt):new Date(0);
-        var pending={ source: curNewer?cur:par, target:target, targetId:targetId };
-        if(new Date(target.dateLastActivity) > lastSync){
-          st.textContent='Achtung: Die andere Karte wurde seit dem letzten Abgleich geändert – die neuere Version gewinnt.';
-          var cw=el('div','syncbar-btns'); cw.style.marginTop='8px';
-          var yes=el('button','btn btn-primary','Trotzdem übernehmen');
-          var no=el('button','btn btn-ghost','Abbrechen');
-          cw.appendChild(yes); cw.appendChild(no); st.parentNode.appendChild(cw);
-          if(t.sizeTo) t.sizeTo('#app');
-          yes.addEventListener('click', function(){ cw.remove(); applySync(pending, pluginId, link, st, sb); });
-          no.addEventListener('click', function(){ cw.remove(); bSync.disabled=false; bStop.disabled=false; st.textContent=''; });
-        } else {
-          applySync(pending, pluginId, link, st, sb);
-        }
-      });
     }).catch(function(e){ st.textContent='Fehler: '+e.message; bSync.disabled=false; bStop.disabled=false; });
   }
 

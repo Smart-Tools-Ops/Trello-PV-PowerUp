@@ -6,11 +6,12 @@
 
 var APP_NAME = 'PV Work List';
 
-/* Zugriffs-Token wird pro Nutzer privat gespeichert (member/private) und
-   manuell einmalig eingetragen – das umgeht das fehleranfällige OAuth-Popup. */
-function getStoredToken(t){ return t.get('member','private','trelloToken').then(function(v){ return v||null; }); }
-function setStoredToken(t, token){ return t.set('member','private','trelloToken', token); }
-function clearStoredToken(t){ return t.remove('member','private','trelloToken'); }
+/* Zugriffs-Token wird im Browser-Speicher der Power-Up-Seite abgelegt
+   (pro Nutzer/Gerät) und manuell einmalig eingetragen. Das ist zuverlässig
+   in der eingebetteten Ansicht und umgeht das fehleranfällige OAuth-Popup. */
+function getStoredToken(){ try { return localStorage.getItem('pvSyncToken') || null; } catch(e){ return null; } }
+function setStoredToken(token){ try { localStorage.setItem('pvSyncToken', token); return true; } catch(e){ return false; } }
+function clearStoredToken(){ try { localStorage.removeItem('pvSyncToken'); } catch(e){} }
 function authorizeUrl(){
   return 'https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token'
     + '&name=' + encodeURIComponent(APP_NAME) + '&key=' + encodeURIComponent(APP_KEY);
@@ -18,21 +19,20 @@ function authorizeUrl(){
 
 /* --- REST-Aufruf: GET über Query, Schreibzugriffe über Formular-Body --- */
 function api(t, method, path, params){
-  return getStoredToken(t).then(function(token){
-    if(!token) throw new Error('Kein Trello-Zugriffscode gespeichert.');
-    params = params || {};
-    params.key = APP_KEY; params.token = token;
-    var enc = Object.keys(params).map(function(k){
-      return encodeURIComponent(k)+'='+encodeURIComponent(params[k]==null?'':params[k]);
-    }).join('&');
-    var url = 'https://api.trello.com/1/'+path, opts;
-    if(method==='GET'){ url += (path.indexOf('?')>-1?'&':'?')+enc; opts={ method:'GET' }; }
-    else { opts={ method:method, headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:enc }; }
-    return fetch(url, opts).then(function(r){
-      if(!r.ok) return r.text().then(function(x){ throw new Error('Trello-API '+r.status+': '+x); });
-      if(r.status===204) return null;
-      return r.json().catch(function(){ return null; });
-    });
+  var token = getStoredToken();
+  if(!token) return Promise.reject(new Error('Kein Trello-Zugriffscode gespeichert.'));
+  params = params || {};
+  params.key = APP_KEY; params.token = token;
+  var enc = Object.keys(params).map(function(k){
+    return encodeURIComponent(k)+'='+encodeURIComponent(params[k]==null?'':params[k]);
+  }).join('&');
+  var url = 'https://api.trello.com/1/'+path, opts;
+  if(method==='GET'){ url += (path.indexOf('?')>-1?'&':'?')+enc; opts={ method:'GET' }; }
+  else { opts={ method:method, headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:enc }; }
+  return fetch(url, opts).then(function(r){
+    if(!r.ok) return r.text().then(function(x){ throw new Error('Trello-API '+r.status+': '+x); });
+    if(r.status===204) return null;
+    return r.json().catch(function(){ return null; });
   });
 }
 
