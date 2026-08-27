@@ -9,7 +9,10 @@
 </head>
 <body>
   <div class="wrap">
-    <p class="intro" id="status">Lade Boards…</p>
+    <p class="intro" id="status">Einen Moment…</p>
+    <div id="auth" style="display:none">
+      <button id="authBtn" class="btn btn-primary">Trello-Zugriff erlauben</button>
+    </div>
     <div id="picker" style="display:none">
       <div class="field" style="margin-bottom:12px">
         <label>Zielboard</label>
@@ -30,17 +33,40 @@
   var ctx = null, source = null;
   function setStatus(m){ document.getElementById('status').textContent = m; }
 
-  ensureAuth(t).then(function(){
-    return t.card('id','idBoard');
-  }).then(function(card){
-    ctx = card;
-    return api(t,'GET','members/me/boards', { fields:'name', filter:'open' });
-  }).then(function(boards){
-    var sel = document.getElementById('boardSel');
-    (boards||[]).forEach(function(b){ sel.appendChild(new Option(b.name, b.id)); });
-    document.getElementById('status').textContent = 'Wohin soll die Karte gespiegelt werden?';
-    document.getElementById('picker').style.display = 'block';
-  }).catch(function(e){ setStatus('Fehler: '+e.message); });
+  function begin(){
+    if(!APP_KEY || APP_KEY.indexOf('HIER_DEINEN') === 0){
+      setStatus('Es ist noch kein Trello-API-Key in config.js eingetragen. Bitte den Key eintragen und config.js erneut hochladen.');
+      return;
+    }
+    t.getRestApi().isAuthorized().then(function(ok){
+      if(ok){ loadBoards(); }
+      else {
+        setStatus('Für die Synchronisation muss der Zugriff auf dein Trello einmalig erlaubt werden.');
+        document.getElementById('auth').style.display = 'block';
+      }
+    }).catch(function(e){ setStatus('Fehler bei der Autorisierungsprüfung: ' + e.message); });
+  }
+
+  document.getElementById('authBtn').addEventListener('click', function(){
+    setStatus('Öffne Trello-Zugriffsfenster… (bitte im neuen Fenster bestätigen)');
+    t.getRestApi().authorize({ scope:'read,write', expiration:'never' }).then(function(){
+      document.getElementById('auth').style.display = 'none';
+      loadBoards();
+    }).catch(function(e){ setStatus('Zugriff nicht erteilt: ' + e.message); });
+  });
+
+  function loadBoards(){
+    setStatus('Lade Boards…');
+    return t.card('id','idBoard').then(function(card){
+      ctx = card;
+      return api(t,'GET','members/me/boards', { fields:'name', filter:'open' });
+    }).then(function(boards){
+      var sel = document.getElementById('boardSel');
+      (boards||[]).forEach(function(b){ sel.appendChild(new Option(b.name, b.id)); });
+      setStatus('Wohin soll die Karte gespiegelt werden?');
+      document.getElementById('picker').style.display = 'block';
+    }).catch(function(e){ setStatus('Fehler beim Laden: ' + e.message); });
+  }
 
   document.getElementById('boardSel').addEventListener('change', function(e){
     var bid = e.target.value;
@@ -50,7 +76,7 @@
     api(t,'GET','boards/'+bid+'/lists', { fields:'name' }).then(function(lists){
       listSel.innerHTML = '<option value="">— wählen —</option>';
       (lists||[]).forEach(function(l){ listSel.appendChild(new Option(l.name, l.id)); });
-    }).catch(function(err){ listSel.innerHTML = '<option value="">Fehler beim Laden</option>'; });
+    }).catch(function(){ listSel.innerHTML = '<option value="">Fehler beim Laden</option>'; });
   });
 
   document.getElementById('go').addEventListener('click', function(){
@@ -70,8 +96,8 @@
         return p.then(function(){
           var now = new Date().toISOString();
           return Promise.all([
-            setLink(t, ctx.id,   { partner: mirrorId, partnerBoard: targetBoard,   role:'origin', lastSyncAt: now }),
-            setLink(t, mirrorId, { partner: ctx.id,   partnerBoard: ctx.idBoard,    role:'mirror', lastSyncAt: now })
+            setLink(t, ctx.id,   { partner: mirrorId, partnerBoard: targetBoard, role:'origin', lastSyncAt: now }),
+            setLink(t, mirrorId, { partner: ctx.id,   partnerBoard: ctx.idBoard,  role:'mirror', lastSyncAt: now })
           ]);
         });
       });
@@ -79,8 +105,10 @@
       t.set('card','shared','_synctouch', Date.now());
       setStatus('Fertig! Die Karte ist gespiegelt. Die Formulardaten erscheinen auf der Kopie beim ersten Abgleich dort.');
       setTimeout(function(){ t.closePopup(); }, 2000);
-    }).catch(function(e){ setStatus('Fehler: '+e.message); document.getElementById('go').disabled = false; });
+    }).catch(function(e){ setStatus('Fehler: ' + e.message); document.getElementById('go').disabled = false; });
   });
+
+  begin();
 </script>
 </body>
 </html>

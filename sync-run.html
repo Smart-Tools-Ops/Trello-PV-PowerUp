@@ -9,7 +9,10 @@
 </head>
 <body>
   <div class="wrap">
-    <p class="intro" id="status">Prüfe Verknüpfung…</p>
+    <p class="intro" id="status">Einen Moment…</p>
+    <div id="auth" style="display:none">
+      <button id="authBtn" class="btn btn-primary">Trello-Zugriff erlauben</button>
+    </div>
     <div id="confirm" style="display:none">
       <button id="apply" class="btn btn-primary">Trotzdem übernehmen</button>
       <button id="cancel" class="btn btn-ghost">Abbrechen</button>
@@ -23,31 +26,54 @@
   var ctx = null, pluginId = null, theLink = null, pending = null;
   function set(m){ document.getElementById('status').textContent = m; }
 
-  ensureAuth(t).then(function(){
-    pluginId = t.getContext().plugin;
-    return t.card('id','idBoard');
-  }).then(function(card){
-    ctx = card;
-    return getLink(t, card.id);
-  }).then(function(link){
-    if(!link){ set('Diese Karte ist nicht (mehr) verknüpft.'); return; }
-    theLink = link;
-    return Promise.all([ getCore(t, ctx.id), getCore(t, link.partner) ]).then(function(cores){
-      var cur = cores[0], par = cores[1];
-      var curNewer = new Date(cur.dateLastActivity) >= new Date(par.dateLastActivity);
-      var target   = curNewer ? par : cur;
-      var targetId = curNewer ? link.partner : ctx.id;
-      var lastSync = link.lastSyncAt ? new Date(link.lastSyncAt) : new Date(0);
-      pending = { source: curNewer ? cur : par, target: target, targetId: targetId };
-      var targetChanged = new Date(target.dateLastActivity) > lastSync;
-      if(targetChanged){
-        set('Achtung: Die zu überschreibende Karte wurde seit dem letzten Abgleich geändert. Wenn du fortfährst, gewinnt die neuere Version – Änderungen auf der anderen Karte können verloren gehen.');
-        document.getElementById('confirm').style.display = 'block';
-      } else {
-        apply();
+  function begin(){
+    if(!APP_KEY || APP_KEY.indexOf('HIER_DEINEN') === 0){
+      set('Es ist noch kein Trello-API-Key in config.js eingetragen. Bitte den Key eintragen und config.js erneut hochladen.');
+      return;
+    }
+    t.getRestApi().isAuthorized().then(function(ok){
+      if(ok){ run(); }
+      else {
+        set('Für die Synchronisation muss der Zugriff auf dein Trello einmalig erlaubt werden.');
+        document.getElementById('auth').style.display = 'block';
       }
-    });
-  }).catch(function(e){ set('Fehler: '+e.message); });
+    }).catch(function(e){ set('Fehler bei der Autorisierungsprüfung: ' + e.message); });
+  }
+
+  document.getElementById('authBtn').addEventListener('click', function(){
+    set('Öffne Trello-Zugriffsfenster… (bitte im neuen Fenster bestätigen)');
+    t.getRestApi().authorize({ scope:'read,write', expiration:'never' }).then(function(){
+      document.getElementById('auth').style.display = 'none';
+      run();
+    }).catch(function(e){ set('Zugriff nicht erteilt: ' + e.message); });
+  });
+
+  function run(){
+    set('Prüfe Verknüpfung…');
+    pluginId = t.getContext().plugin;
+    t.card('id','idBoard').then(function(card){
+      ctx = card;
+      return getLink(t, card.id);
+    }).then(function(link){
+      if(!link){ set('Diese Karte ist nicht (mehr) verknüpft.'); return; }
+      theLink = link;
+      return Promise.all([ getCore(t, ctx.id), getCore(t, link.partner) ]).then(function(cores){
+        var cur = cores[0], par = cores[1];
+        var curNewer = new Date(cur.dateLastActivity) >= new Date(par.dateLastActivity);
+        var target   = curNewer ? par : cur;
+        var targetId = curNewer ? link.partner : ctx.id;
+        var lastSync = link.lastSyncAt ? new Date(link.lastSyncAt) : new Date(0);
+        pending = { source: curNewer ? cur : par, target: target, targetId: targetId };
+        var targetChanged = new Date(target.dateLastActivity) > lastSync;
+        if(targetChanged){
+          set('Achtung: Die zu überschreibende Karte wurde seit dem letzten Abgleich geändert. Wenn du fortfährst, gewinnt die neuere Version – Änderungen auf der anderen Karte können verloren gehen.');
+          document.getElementById('confirm').style.display = 'block';
+        } else {
+          apply();
+        }
+      });
+    }).catch(function(e){ set('Fehler: ' + e.message); });
+  }
 
   document.getElementById('apply').addEventListener('click', function(){
     document.getElementById('confirm').style.display = 'none'; apply();
@@ -71,7 +97,7 @@
       } else {
         finish('Abgeglichen.');
       }
-    }).catch(function(e){ set('Fehler beim Abgleich: '+e.message); });
+    }).catch(function(e){ set('Fehler beim Abgleich: ' + e.message); });
   }
 
   function finish(msg){
@@ -82,6 +108,8 @@
     set(msg + ' ✓');
     setTimeout(function(){ t.closePopup(); }, 1600);
   }
+
+  begin();
 </script>
 </body>
 </html>
