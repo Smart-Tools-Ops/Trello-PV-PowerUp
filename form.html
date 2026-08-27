@@ -13,9 +13,10 @@
 <script src="./config.js"></script>
 <script src="./sync.js"></script>
 <script>
-  var t = TrelloPowerUp.iframe();
+  var t = TrelloPowerUp.iframe({ appKey: APP_KEY, appName: APP_NAME });
   var config = null, data = {}, dirty = false, statusEl = null, saveBtn = null;
-  var cardId = null, currentLink = null;
+  var cardId = null, cardBoardId = null, currentLink = null;
+  var startCtx = null, startSource = null;
 
   function el(tag, cls, txt){ var e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
   function markDirty(){ dirty=true; if(statusEl){ statusEl.textContent='● Nicht gespeichert'; statusEl.className='status dirty'; } if(saveBtn) saveBtn.disabled=false; }
@@ -57,31 +58,10 @@
   function render(){
     var app=document.getElementById('app'); app.innerHTML='';
 
-    // ---- Sync-Leiste ----
+    // ---- Sync-Leiste (inline, ohne Popup) ----
     var sb=el('div','syncbar');
-    sb.appendChild(el('div','syncbar-title','Karten-Sync'));
-    if(currentLink){
-      sb.appendChild(el('div','syncbar-text','Diese Karte ist mit einer Karte auf einem anderen Board synchronisiert.'));
-      var row=el('div','syncbar-btns');
-      var bSync=el('button','btn btn-primary','Synchronisieren');
-      bSync.addEventListener('click', function(){ t.popup({ title:'Synchronisieren', url:'./sync-run.html', height:300 }); });
-      var bStop=el('button','btn btn-ghost','Synchronisation stoppen');
-      bStop.addEventListener('click', function(){
-        t.popup({ type:'confirm', title:'Synchronisation stoppen?',
-          message:'Die Verbindung wird getrennt. Beide Karten bleiben bestehen, werden aber nicht mehr abgeglichen.',
-          confirmText:'Ja, trennen', cancelText:'Abbrechen',
-          onConfirm: function(t){ return stopSync(t).then(function(){ return refreshLink(); }).then(function(){ render(); return t.closePopup(); }); }
-        });
-      });
-      row.appendChild(bSync); row.appendChild(bStop); sb.appendChild(row);
-    } else {
-      sb.appendChild(el('div','syncbar-text','Diese Karte ist nicht synchronisiert.'));
-      var row2=el('div','syncbar-btns');
-      var bStart=el('button','btn btn-primary','Synchronisation starten');
-      bStart.addEventListener('click', function(){ t.popup({ title:'Karte synchronisieren', url:'./sync-start.html', height:360 }); });
-      row2.appendChild(bStart); sb.appendChild(row2);
-    }
     app.appendChild(sb);
+    renderSyncBar(sb);
 
     // Kopf mit Master-Collapse
     var head=el('div','head');
@@ -186,10 +166,193 @@
   }
 
   function refreshLink(){
-    return t.card('id').then(function(c){ cardId=c.id; return getLink(t, cardId); })
+    return t.card('id','idBoard').then(function(c){ cardId=c.id; cardBoardId=c.idBoard; return getLink(t, cardId); })
       .then(function(link){ currentLink=link||null; })
       .catch(function(){ currentLink=null; });
   }
+  /* ================= Inline-Sync (ohne Popup) ================= */
+  function renderSyncBar(sb){
+    sb.innerHTML='';
+    sb.appendChild(el('div','syncbar-title','Karten-Sync'));
+    var st=el('div','syncbar-text',''); 
+    if(currentLink){
+      sb.appendChild(el('div','syncbar-text','Diese Karte ist mit einer Karte auf einem anderen Board synchronisiert.'));
+      var row=el('div','syncbar-btns');
+      var bSync=el('button','btn btn-primary','Synchronisieren');
+      var bStop=el('button','btn btn-ghost','Synchronisation stoppen');
+      row.appendChild(bSync); row.appendChild(bStop); sb.appendChild(row);
+      sb.appendChild(st);
+      bSync.addEventListener('click', function(){ runSync(sb, bSync, bStop, st); });
+      bStop.addEventListener('click', function(){ confirmStop(sb, row, st); });
+    } else {
+      sb.appendChild(el('div','syncbar-text','Diese Karte ist nicht synchronisiert.'));
+      var row2=el('div','syncbar-btns');
+      var bStart=el('button','btn btn-primary','Synchronisation starten');
+      row2.appendChild(bStart); sb.appendChild(row2);
+      bStart.addEventListener('click', function(){ startFlow(sb); });
+    }
+    if(t.sizeTo) t.sizeTo('#app');
+  }
+
+  function keyMissing(){ return !APP_KEY || APP_KEY.indexOf('HIER_DEINEN')===0; }
+
+  function startFlow(sb){
+    sb.innerHTML='';
+    sb.appendChild(el('div','syncbar-title','Karte synchronisieren'));
+    var status=el('div','syncbar-text','Einen Moment…'); sb.appendChild(status);
+    var body=el('div'); body.style.marginTop='8px'; sb.appendChild(body);
+    var cancel=el('button','btn btn-ghost','Abbrechen'); cancel.style.marginTop='10px';
+    cancel.addEventListener('click', function(){ renderSyncBar(sb); });
+    sb.appendChild(cancel);
+    if(t.sizeTo) t.sizeTo('#app');
+
+    if(keyMissing()){ status.textContent='Es ist kein API-Key in config.js hinterlegt.'; return; }
+    t.getRestApi().isAuthorized().then(function(ok){
+      if(ok){ loadBoardsInline(status, body, sb); }
+      else {
+        status.textContent='Für die Synchronisation muss der Zugriff einmalig erlaubt werden.';
+        var ab=el('button','btn btn-primary','Trello-Zugriff erlauben'); ab.style.marginTop='4px';
+        body.appendChild(ab);
+        ab.addEventListener('click', function(){
+          status.textContent='Öffne Trello-Zugriffsfenster… (bitte im neuen Fenster bestätigen)';
+          t.getRestApi().authorize({ scope:'read,write', expiration:'never' }).then(function(){
+            body.innerHTML=''; loadBoardsInline(status, body, sb);
+          }).catch(function(e){ status.textContent='Zugriff nicht erteilt: '+e.message; });
+        });
+      }
+    }).catch(function(e){ status.textContent='Fehler: '+e.message; });
+  }
+
+  function loadBoardsInline(status, body, sb){
+    status.textContent='Lade Boards…';
+    t.card('id','idBoard').then(function(card){
+      startCtx=card;
+      return api(t,'GET','members/me/boards', { fields:'name', filter:'open' });
+    }).then(function(boards){
+      body.innerHTML='';
+      var bf=el('div','field'); bf.style.marginBottom='10px'; bf.appendChild(el('label',null,'Zielboard'));
+      var bsel=document.createElement('select'); bsel.appendChild(new Option('— wählen —',''));
+      (boards||[]).forEach(function(b){ bsel.appendChild(new Option(b.name,b.id)); });
+      bf.appendChild(bsel); body.appendChild(bf);
+      var lf=el('div','field'); lf.style.marginBottom='10px'; lf.appendChild(el('label',null,'Spalte (Liste)'));
+      var lsel=document.createElement('select'); lsel.appendChild(new Option('— zuerst Board wählen —',''));
+      lf.appendChild(lsel); body.appendChild(lf);
+      var go=el('button','btn btn-primary','Synchronisieren'); body.appendChild(go);
+      status.textContent='Wohin soll die Karte gespiegelt werden?';
+      if(t.sizeTo) t.sizeTo('#app');
+      bsel.addEventListener('change', function(){
+        var bid=bsel.value; lsel.innerHTML='<option value="">— lädt… —</option>';
+        if(!bid){ lsel.innerHTML='<option value="">— zuerst Board wählen —</option>'; return; }
+        api(t,'GET','boards/'+bid+'/lists', { fields:'name' }).then(function(lists){
+          lsel.innerHTML='<option value="">— wählen —</option>';
+          (lists||[]).forEach(function(l){ lsel.appendChild(new Option(l.name,l.id)); });
+        }).catch(function(){ lsel.innerHTML='<option value="">Fehler</option>'; });
+      });
+      go.addEventListener('click', function(){
+        var tb=bsel.value, tl=lsel.value;
+        if(!tb||!tl){ status.textContent='Bitte Board und Spalte wählen.'; return; }
+        go.disabled=true; status.textContent='Erstelle synchronisierte Karte…';
+        doCreateMirror(tb, tl, status, sb);
+      });
+    }).catch(function(e){ status.textContent='Fehler beim Laden: '+e.message; });
+  }
+
+  function doCreateMirror(targetBoard, targetList, status, sb){
+    getCore(t, startCtx.id).then(function(cur){
+      startSource=cur;
+      return api(t,'POST','cards', { idList:targetList, name:cur.name||'', desc:cur.desc||'', due:cur.due||'' });
+    }).then(function(newCard){
+      var mid=newCard.id;
+      return mapLabels(t, startSource.idLabels, startSource.idBoard, targetBoard).then(function(tgt){
+        var p = tgt.length ? api(t,'PUT','cards/'+mid, { idLabels: tgt.join(',') }) : Promise.resolve();
+        return p.then(function(){
+          var now=new Date().toISOString();
+          return Promise.all([
+            setLink(t, startCtx.id, { partner:mid, partnerBoard:targetBoard, role:'origin', lastSyncAt:now }),
+            setLink(t, mid, { partner:startCtx.id, partnerBoard:startCtx.idBoard, role:'mirror', lastSyncAt:now })
+          ]);
+        });
+      });
+    }).then(function(){
+      status.textContent='Fertig! Karte gespiegelt.';
+      refreshLink().then(function(){ renderSyncBar(sb); });
+    }).catch(function(e){ status.textContent='Fehler: '+e.message; });
+  }
+
+  function runSync(sb, bSync, bStop, st){
+    if(keyMissing()){ st.textContent='Es ist kein API-Key in config.js hinterlegt.'; return; }
+    bSync.disabled=true; bStop.disabled=true; st.textContent='Prüfe…';
+    t.getRestApi().isAuthorized().then(function(ok){
+      if(!ok){
+        st.textContent='Einmalige Freigabe nötig – bitte „Synchronisation starten" nutzen, dort Zugriff erlauben.';
+        bSync.disabled=false; bStop.disabled=false; return;
+      }
+      var pluginId=t.getContext().plugin, link=currentLink;
+      return Promise.all([ getCore(t, cardId), getCore(t, link.partner) ]).then(function(cores){
+        var cur=cores[0], par=cores[1];
+        var curNewer=new Date(cur.dateLastActivity)>=new Date(par.dateLastActivity);
+        var target=curNewer?par:cur, targetId=curNewer?link.partner:cardId;
+        var lastSync=link.lastSyncAt?new Date(link.lastSyncAt):new Date(0);
+        var pending={ source: curNewer?cur:par, target:target, targetId:targetId };
+        if(new Date(target.dateLastActivity) > lastSync){
+          st.textContent='Achtung: Die andere Karte wurde seit dem letzten Abgleich geändert – die neuere Version gewinnt.';
+          var cw=el('div','syncbar-btns'); cw.style.marginTop='8px';
+          var yes=el('button','btn btn-primary','Trotzdem übernehmen');
+          var no=el('button','btn btn-ghost','Abbrechen');
+          cw.appendChild(yes); cw.appendChild(no); st.parentNode.appendChild(cw);
+          if(t.sizeTo) t.sizeTo('#app');
+          yes.addEventListener('click', function(){ cw.remove(); applySync(pending, pluginId, link, st, sb); });
+          no.addEventListener('click', function(){ cw.remove(); bSync.disabled=false; bStop.disabled=false; st.textContent=''; });
+        } else {
+          applySync(pending, pluginId, link, st, sb);
+        }
+      });
+    }).catch(function(e){ st.textContent='Fehler: '+e.message; bSync.disabled=false; bStop.disabled=false; });
+  }
+
+  function applySync(p, pluginId, link, st, sb){
+    st.textContent='Gleiche ab…';
+    mapLabels(t, p.source.idLabels, p.source.idBoard, p.target.idBoard).then(function(tgt){
+      return applyCore(t, p.targetId, p.source, tgt);
+    }).then(function(){
+      return Promise.all([ t.get('card','shared','projektdaten'), getRemoteForm(t, link.partner, pluginId) ]);
+    }).then(function(forms){
+      var mine=forms[0]||{}, partner=forms[1]||{};
+      var mineT=mine._updatedAt||0, partnerT=partner._updatedAt||0;
+      var now=new Date().toISOString();
+      setLink(t, cardId, { partner:link.partner, partnerBoard:link.partnerBoard, role:link.role, lastSyncAt:now });
+      setLink(t, link.partner, { partner:cardId, partnerBoard:cardBoardId, role:(link.role==='origin'?'mirror':'origin'), lastSyncAt:now });
+      if(currentLink) currentLink.lastSyncAt=now;
+      if(partnerT>mineT){
+        return t.set('card','shared','projektdaten', partner).then(function(){
+          data=partner; st.textContent='Abgeglichen ✓ Formulardaten übernommen. Aktualisiere…';
+          setTimeout(function(){ render(); }, 900);
+        });
+      } else {
+        st.textContent = (mineT>partnerT)
+          ? 'Abgeglichen ✓ Deine Formulardaten sind neuer – erscheinen drüben beim nächsten Abgleich.'
+          : 'Abgeglichen ✓';
+      }
+    }).catch(function(e){ st.textContent='Fehler beim Abgleich: '+e.message; });
+  }
+
+  function confirmStop(sb, row, st){
+    row.style.display='none';
+    var cw=el('div'); cw.style.marginTop='4px';
+    cw.appendChild(el('div','syncbar-text','Verbindung wirklich trennen?'));
+    var b=el('div','syncbar-btns');
+    var yes=el('button','btn btn-primary','Ja, trennen');
+    var no=el('button','btn btn-ghost','Abbrechen');
+    b.appendChild(yes); b.appendChild(no); cw.appendChild(b); sb.appendChild(cw);
+    if(t.sizeTo) t.sizeTo('#app');
+    no.addEventListener('click', function(){ cw.remove(); row.style.display=''; });
+    yes.addEventListener('click', function(){
+      st.textContent='Trenne…';
+      stopSync(t).then(function(){ return refreshLink(); }).then(function(){ renderSyncBar(sb); })
+        .catch(function(e){ st.textContent='Fehler: '+e.message; });
+    });
+  }
+
   function init(){
     Promise.all([ loadConfig(t), loadCardData(t), refreshLink() ]).then(function(res){
       config=res[0]; data=res[1] || {};
