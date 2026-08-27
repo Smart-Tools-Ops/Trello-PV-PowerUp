@@ -6,17 +6,20 @@
 
 var APP_NAME = 'PV Work List';
 
-/* --- Autorisierung sicherstellen (öffnet beim ersten Mal ein Trello-Fenster) --- */
-function ensureAuth(t){
-  return t.getRestApi().isAuthorized().then(function(ok){
-    if(ok) return true;
-    return t.getRestApi().authorize({ scope:'read,write', expiration:'never' }).then(function(){ return true; });
-  });
+/* Zugriffs-Token wird pro Nutzer privat gespeichert (member/private) und
+   manuell einmalig eingetragen – das umgeht das fehleranfällige OAuth-Popup. */
+function getStoredToken(t){ return t.get('member','private','trelloToken').then(function(v){ return v||null; }); }
+function setStoredToken(t, token){ return t.set('member','private','trelloToken', token); }
+function clearStoredToken(t){ return t.remove('member','private','trelloToken'); }
+function authorizeUrl(){
+  return 'https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token'
+    + '&name=' + encodeURIComponent(APP_NAME) + '&key=' + encodeURIComponent(APP_KEY);
 }
 
 /* --- REST-Aufruf: GET über Query, Schreibzugriffe über Formular-Body --- */
 function api(t, method, path, params){
-  return t.getRestApi().getToken().then(function(token){
+  return getStoredToken(t).then(function(token){
+    if(!token) throw new Error('Kein Trello-Zugriffscode gespeichert.');
     params = params || {};
     params.key = APP_KEY; params.token = token;
     var enc = Object.keys(params).map(function(k){

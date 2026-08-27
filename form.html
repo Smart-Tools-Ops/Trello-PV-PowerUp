@@ -207,20 +207,32 @@
     if(t.sizeTo) t.sizeTo('#app');
 
     if(keyMissing()){ status.textContent='Es ist kein API-Key in config.js hinterlegt.'; return; }
-    t.getRestApi().isAuthorized().then(function(ok){
-      if(ok){ loadBoardsInline(status, body, sb); }
-      else {
-        status.textContent='Für die Synchronisation muss der Zugriff einmalig erlaubt werden.';
-        var ab=el('button','btn btn-primary','Trello-Zugriff erlauben'); ab.style.marginTop='4px';
-        body.appendChild(ab);
-        ab.addEventListener('click', function(){
-          status.textContent='Öffne Trello-Zugriffsfenster… (bitte im neuen Fenster bestätigen)';
-          t.getRestApi().authorize({ scope:'read,write', expiration:'never' }).then(function(){
-            body.innerHTML=''; loadBoardsInline(status, body, sb);
-          }).catch(function(e){ status.textContent='Zugriff nicht erteilt: '+e.message; });
-        });
-      }
+    getStoredToken(t).then(function(token){
+      if(token){ loadBoardsInline(status, body, sb); }
+      else { showManualAuth(status, body, sb); }
     }).catch(function(e){ status.textContent='Fehler: '+e.message; });
+  }
+
+  function showManualAuth(status, body, sb){
+    body.innerHTML='';
+    status.textContent='Einmalige Freigabe nötig:';
+    var steps=el('div','syncbar-text','');
+    steps.innerHTML='1. Auf „Trello-Freigabe öffnen" klicken (neuer Tab). &nbsp; 2. Dort auf „Zulassen/Allow" klicken. &nbsp; 3. Den angezeigten Code kopieren und unten einfügen.';
+    steps.style.marginBottom='8px'; body.appendChild(steps);
+    var open=el('button','btn btn-ghost','Trello-Freigabe öffnen'); open.style.marginBottom='10px';
+    open.addEventListener('click', function(){ window.open(authorizeUrl(), '_blank'); });
+    body.appendChild(open);
+    var f=el('div','field'); f.style.marginBottom='10px'; f.appendChild(el('label',null,'Code hier einfügen'));
+    var inp=document.createElement('input'); inp.type='text'; inp.placeholder='Code aus dem Trello-Tab'; f.appendChild(inp); body.appendChild(f);
+    var save=el('button','btn btn-primary','Code speichern'); body.appendChild(save);
+    if(t.sizeTo) t.sizeTo('#app');
+    save.addEventListener('click', function(){
+      var tok=(inp.value||'').trim();
+      if(!tok){ status.textContent='Bitte den Code einfügen.'; return; }
+      save.disabled=true; status.textContent='Speichere Code…';
+      setStoredToken(t, tok).then(function(){ body.innerHTML=''; loadBoardsInline(status, body, sb); })
+        .catch(function(e){ status.textContent='Fehler: '+e.message; save.disabled=false; });
+    });
   }
 
   function loadBoardsInline(status, body, sb){
@@ -282,9 +294,9 @@
   function runSync(sb, bSync, bStop, st){
     if(keyMissing()){ st.textContent='Es ist kein API-Key in config.js hinterlegt.'; return; }
     bSync.disabled=true; bStop.disabled=true; st.textContent='Prüfe…';
-    t.getRestApi().isAuthorized().then(function(ok){
-      if(!ok){
-        st.textContent='Einmalige Freigabe nötig – bitte „Synchronisation starten" nutzen, dort Zugriff erlauben.';
+    getStoredToken(t).then(function(tok){
+      if(!tok){
+        st.textContent='Einmalige Freigabe nötig – bitte „Synchronisation starten" öffnen und den Code eintragen.';
         bSync.disabled=false; bStop.disabled=false; return;
       }
       var pluginId=t.getContext().plugin, link=currentLink;
