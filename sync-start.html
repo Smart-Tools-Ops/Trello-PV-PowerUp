@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./style.css">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <title>Karte synchronisieren</title>
+</head>
+<body>
+  <div class="wrap">
+    <p class="intro" id="status">Lade Boards…</p>
+    <div id="picker" style="display:none">
+      <div class="field" style="margin-bottom:12px">
+        <label>Zielboard</label>
+        <select id="boardSel"><option value="">— wählen —</option></select>
+      </div>
+      <div class="field" style="margin-bottom:16px">
+        <label>Spalte (Liste)</label>
+        <select id="listSel"><option value="">— zuerst Board wählen —</option></select>
+      </div>
+      <button id="go" class="btn btn-primary">Synchronisieren</button>
+    </div>
+  </div>
+
+<script src="./config.js"></script>
+<script src="./sync.js"></script>
+<script>
+  var t = TrelloPowerUp.iframe({ appKey: APP_KEY, appName: APP_NAME });
+  var ctx = null, source = null;
+  function setStatus(m){ document.getElementById('status').textContent = m; }
+
+  ensureAuth(t).then(function(){
+    return t.card('id','idBoard');
+  }).then(function(card){
+    ctx = card;
+    return api(t,'GET','members/me/boards', { fields:'name', filter:'open' });
+  }).then(function(boards){
+    var sel = document.getElementById('boardSel');
+    (boards||[]).forEach(function(b){ sel.appendChild(new Option(b.name, b.id)); });
+    document.getElementById('status').textContent = 'Wohin soll die Karte gespiegelt werden?';
+    document.getElementById('picker').style.display = 'block';
+  }).catch(function(e){ setStatus('Fehler: '+e.message); });
+
+  document.getElementById('boardSel').addEventListener('change', function(e){
+    var bid = e.target.value;
+    var listSel = document.getElementById('listSel');
+    listSel.innerHTML = '<option value="">— lädt… —</option>';
+    if(!bid){ listSel.innerHTML = '<option value="">— zuerst Board wählen —</option>'; return; }
+    api(t,'GET','boards/'+bid+'/lists', { fields:'name' }).then(function(lists){
+      listSel.innerHTML = '<option value="">— wählen —</option>';
+      (lists||[]).forEach(function(l){ listSel.appendChild(new Option(l.name, l.id)); });
+    }).catch(function(err){ listSel.innerHTML = '<option value="">Fehler beim Laden</option>'; });
+  });
+
+  document.getElementById('go').addEventListener('click', function(){
+    var targetBoard = document.getElementById('boardSel').value;
+    var targetList  = document.getElementById('listSel').value;
+    if(!targetBoard || !targetList){ setStatus('Bitte Board und Spalte wählen.'); return; }
+    document.getElementById('go').disabled = true;
+    setStatus('Erstelle synchronisierte Karte…');
+
+    getCore(t, ctx.id).then(function(cur){
+      source = cur;
+      return api(t,'POST','cards', { idList: targetList, name: cur.name||'', desc: cur.desc||'', due: cur.due||'' });
+    }).then(function(newCard){
+      var mirrorId = newCard.id;
+      return mapLabels(t, source.idLabels, source.idBoard, targetBoard).then(function(tgt){
+        var p = tgt.length ? api(t,'PUT','cards/'+mirrorId, { idLabels: tgt.join(',') }) : Promise.resolve();
+        return p.then(function(){
+          var now = new Date().toISOString();
+          return Promise.all([
+            setLink(t, ctx.id,   { partner: mirrorId, partnerBoard: targetBoard,   role:'origin', lastSyncAt: now }),
+            setLink(t, mirrorId, { partner: ctx.id,   partnerBoard: ctx.idBoard,    role:'mirror', lastSyncAt: now })
+          ]);
+        });
+      });
+    }).then(function(){
+      setStatus('Fertig! Die Karte ist gespiegelt. Die Formulardaten erscheinen auf der Kopie beim ersten Abgleich dort.');
+      setTimeout(function(){ t.closePopup(); }, 2000);
+    }).catch(function(e){ setStatus('Fehler: '+e.message); document.getElementById('go').disabled = false; });
+  });
+</script>
+</body>
+</html>

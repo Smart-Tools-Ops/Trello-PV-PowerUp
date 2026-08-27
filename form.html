@@ -147,6 +147,7 @@
   function doSave(){
     saveBtn.disabled=true;
     statusEl.textContent='Speichere…'; statusEl.className='status';
+    data._updatedAt = Date.now();
     saveCardData(t, data).then(function(){
       dirty=false;
       statusEl.textContent='Gespeichert ✓'; statusEl.className='status saved';

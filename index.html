@@ -6,22 +6,49 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
 </head>
 <body>
+<script src="./config.js"></script>
+<script src="./sync.js"></script>
 <script>
   // Absolute Basis-URL dieses Ordners (funktioniert automatisch, egal wohin hochgeladen)
   var BASE = window.location.href.replace(/\/[^\/]*$/, '/');
   var ICON = BASE + 'icon.svg';
+
+  function startPopup(t){ return t.popup({ title:'Karte synchronisieren', url:'./sync-start.html', height:360 }); }
+  function runPopup(t){ return t.popup({ title:'Synchronisieren', url:'./sync-run.html', height:300 }); }
 
   TrelloPowerUp.initialize({
     'card-back-section': function (t) {
       return {
         title: 'Projektdaten',
         icon: ICON,
-        content: {
-          type: 'iframe',
-          url: t.signUrl('./form.html'),
-          height: 640
-        }
+        content: { type:'iframe', url: t.signUrl('./form.html'), height: 640 }
       };
+    },
+
+    'card-buttons': function (t) {
+      return t.card('id').then(function (card) {
+        return getLink(t, card.id).then(function (link) {
+          if (link) {
+            return [
+              { icon: ICON, text: 'Synchronisieren', callback: runPopup },
+              { icon: ICON, text: 'Synchronisation stoppen', callback: function (t) {
+                  return t.popup({
+                    type: 'confirm',
+                    title: 'Synchronisation stoppen?',
+                    message: 'Die Verbindung wird getrennt. Beide Karten bleiben bestehen, werden aber nicht mehr abgeglichen.',
+                    confirmText: 'Ja, trennen',
+                    onConfirm: function (t) { return stopSync(t).then(function(){ return t.closePopup(); }); },
+                    cancelText: 'Abbrechen'
+                  });
+                }
+              }
+            ];
+          }
+          return [ { icon: ICON, text: 'Synchronisation starten', callback: startPopup } ];
+        });
+      }).catch(function () {
+        return [ { icon: ICON, text: 'Synchronisation starten', callback: startPopup } ];
+      });
     },
 
     'card-badges': function (t) {
@@ -44,31 +71,20 @@
     },
 
     'show-settings': function (t) {
-      return t.popup({
-        title: 'Dropdown-Optionen & Farben',
-        url: './settings.html',
-        height: 620
-      });
+      return t.popup({ title: 'Dropdown-Optionen & Farben', url: './settings.html', height: 620 });
     },
 
     'board-buttons': function () {
       return [
-        {
-          icon: { dark: ICON, light: ICON },
-          text: 'Projektdaten-Optionen',
-          callback: function (t) {
-            return t.popup({ title: 'Dropdown-Optionen & Farben', url: './settings.html', height: 620 });
-          }
-        },
-        {
-          icon: { dark: ICON, light: ICON },
-          text: 'Sammelbestellung (CSV)',
-          callback: function (t) {
-            return t.popup({ title: 'Sammelbestellung exportieren', url: './export.html', height: 380 });
-          }
-        }
+        { icon: { dark: ICON, light: ICON }, text: 'Projektdaten-Optionen',
+          callback: function (t) { return t.popup({ title: 'Dropdown-Optionen & Farben', url: './settings.html', height: 620 }); } },
+        { icon: { dark: ICON, light: ICON }, text: 'Sammelbestellung (CSV)',
+          callback: function (t) { return t.popup({ title: 'Sammelbestellung exportieren', url: './export.html', height: 380 }); } }
       ];
     }
+  }, {
+    appKey: APP_KEY,
+    appName: APP_NAME
   });
 </script>
 </body>

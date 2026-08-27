@@ -1,6 +1,4 @@
-Dieses PowerUp wurde mir Claude erstellt und ist für ein Privates Board gestaltet.
-
-# Projektdaten Power-Up für Trello
+# smart nachhaltig – Projektdaten Power-Up für Trello
 
 Ein privates, kostenloses Trello Power-Up, das auf jeder Karte ein Projektdaten-Formular
 (Personalien + Planung) einblendet. Struktur, Bezeichnungen, Farben und Dropdown-Optionen
@@ -16,7 +14,7 @@ werden boardweit im Backend gepflegt; die ausgefüllten Werte werden pro Karte g
 - `style.css` – gemeinsames Design (inkl. automatischem Dunkelmodus)
 - `icon.svg` – Icon für Kartenbereich und Board-Buttons
 
-Alle Dateien gehören zusammen in **den selben Ordner** (das Repository-Wurzelverzeichnis).
+Alle Dateien gehören zusammen in **denselben Ordner** (das Repository-Wurzelverzeichnis).
 
 ## Schritt 1 – Auf GitHub Pages hochladen (kostenlos)
 
@@ -61,3 +59,36 @@ Alle ausgefüllten Werte liegen in Trello, nicht im Repository.
   irgendwann nicht mehr speichern, bitte Bescheid geben – dann teilen wir die Ablage auf.
 - Änderungen am Design: einfach die Datei im Repo ersetzen; GitHub veröffentlicht die
   neue Version automatisch in ca. einer Minute.
+
+---
+
+## Kartensynchronisation (Sync-Erweiterung)
+
+Auf jeder Karte gibt es einen Button "Synchronisation starten". Er spiegelt die
+Karte in ein wählbares Board + Spalte. Danach zeigt die Karte "Synchronisieren"
+(gleicht Kernfelder + Formulardaten mit dem Pendant ab) und "Synchronisation
+stoppen" (löst die Verbindung). Der Abgleich ist manuell per Knopfdruck.
+
+### Einmalige Einrichtung fürs Sync
+1. In `config.js` oben bei `APP_KEY` deinen Trello-API-Key eintragen
+   (Power-Up-Admin -> "API-Schlüssel"). Dort auch deine Pages-Domain als
+   "Allowed Origin" hinzufügen (z. B. `https://smart-tools-ops.github.io`).
+2. Im Admin-Portal unter "Funktionen" zusätzlich `card-buttons` aktivieren.
+3. Beim ersten Klick auf einen Sync-Button erscheint ein Trello-Fenster
+   "Zugriff erlauben" - einmal bestätigen. Das macht jede Person, die
+   synchronisiert (du und der Mitarbeiter).
+
+### Wichtige Voraussetzungen und Grenzen
+- Beide Boards müssen im selben Workspace (Arbeitsbereich) liegen - die
+  Verknüpfung wird auf Workspace-Ebene gespeichert.
+- Wer synchronisiert, muss Mitglied beider Boards sein.
+- Abgeglichen werden: Titel, Beschreibung, Fälligkeit, Labels und die
+  Formulardaten. Checklisten, Kommentare und Anhänge noch nicht.
+- Kernfelder: die zuletzt geänderte Karte gewinnt; wurde die andere Seite seit
+  dem letzten Abgleich geändert, kommt vorher eine Rückfrage.
+- Formulardaten lassen sich technisch nur in die gerade offene Karte holen:
+  Sie wandern beim Abgleich der jeweiligen Karte, nicht per Fernschreibzugriff.
+
+### Geänderte/neue Dateien fürs Sync
+Neu: `sync.js`, `sync-start.html`, `sync-run.html`.
+Geändert: `index.html`, `config.js`, `form.html`.
