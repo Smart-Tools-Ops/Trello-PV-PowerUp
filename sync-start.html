@@ -76,6 +76,7 @@
         });
       });
     }).then(function(){
+      t.set('card','shared','_synctouch', Date.now());
       setStatus('Fertig! Die Karte ist gespiegelt. Die Formulardaten erscheinen auf der Kopie beim ersten Abgleich dort.');
       setTimeout(function(){ t.closePopup(); }, 2000);
     }).catch(function(e){ setStatus('Fehler: '+e.message); document.getElementById('go').disabled = false; });

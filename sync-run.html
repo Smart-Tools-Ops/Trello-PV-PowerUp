@@ -78,6 +78,7 @@
     var now = new Date().toISOString();
     setLink(t, ctx.id, { partner: theLink.partner, partnerBoard: theLink.partnerBoard, role: theLink.role, lastSyncAt: now });
     setLink(t, theLink.partner, { partner: ctx.id, partnerBoard: ctx.idBoard, role: (theLink.role==='origin'?'mirror':'origin'), lastSyncAt: now });
+    t.set('card','shared','_synctouch', Date.now());
     set(msg + ' ✓');
     setTimeout(function(){ t.closePopup(); }, 1600);
   }

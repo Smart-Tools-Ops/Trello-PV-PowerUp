@@ -11,9 +11,11 @@
   <div class="wrap" id="app"></div>
 
 <script src="./config.js"></script>
+<script src="./sync.js"></script>
 <script>
   var t = TrelloPowerUp.iframe();
   var config = null, data = {}, dirty = false, statusEl = null, saveBtn = null;
+  var cardId = null, currentLink = null;
 
   function el(tag, cls, txt){ var e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
   function markDirty(){ dirty=true; if(statusEl){ statusEl.textContent='● Nicht gespeichert'; statusEl.className='status dirty'; } if(saveBtn) saveBtn.disabled=false; }
@@ -54,6 +56,32 @@
 
   function render(){
     var app=document.getElementById('app'); app.innerHTML='';
+
+    // ---- Sync-Leiste ----
+    var sb=el('div','syncbar');
+    sb.appendChild(el('div','syncbar-title','Karten-Sync'));
+    if(currentLink){
+      sb.appendChild(el('div','syncbar-text','Diese Karte ist mit einer Karte auf einem anderen Board synchronisiert.'));
+      var row=el('div','syncbar-btns');
+      var bSync=el('button','btn btn-primary','Synchronisieren');
+      bSync.addEventListener('click', function(){ t.popup({ title:'Synchronisieren', url:'./sync-run.html', height:300 }); });
+      var bStop=el('button','btn btn-ghost','Synchronisation stoppen');
+      bStop.addEventListener('click', function(){
+        t.popup({ type:'confirm', title:'Synchronisation stoppen?',
+          message:'Die Verbindung wird getrennt. Beide Karten bleiben bestehen, werden aber nicht mehr abgeglichen.',
+          confirmText:'Ja, trennen', cancelText:'Abbrechen',
+          onConfirm: function(t){ return stopSync(t).then(function(){ return refreshLink(); }).then(function(){ render(); return t.closePopup(); }); }
+        });
+      });
+      row.appendChild(bSync); row.appendChild(bStop); sb.appendChild(row);
+    } else {
+      sb.appendChild(el('div','syncbar-text','Diese Karte ist nicht synchronisiert.'));
+      var row2=el('div','syncbar-btns');
+      var bStart=el('button','btn btn-primary','Synchronisation starten');
+      bStart.addEventListener('click', function(){ t.popup({ title:'Karte synchronisieren', url:'./sync-start.html', height:360 }); });
+      row2.appendChild(bStart); sb.appendChild(row2);
+    }
+    app.appendChild(sb);
 
     // Kopf mit Master-Collapse
     var head=el('div','head');
@@ -157,8 +185,13 @@
     });
   }
 
+  function refreshLink(){
+    return t.card('id').then(function(c){ cardId=c.id; return getLink(t, cardId); })
+      .then(function(link){ currentLink=link||null; })
+      .catch(function(){ currentLink=null; });
+  }
   function init(){
-    Promise.all([ loadConfig(t), loadCardData(t) ]).then(function(res){
+    Promise.all([ loadConfig(t), loadCardData(t), refreshLink() ]).then(function(res){
       config=res[0]; data=res[1] || {};
       render();
     });
