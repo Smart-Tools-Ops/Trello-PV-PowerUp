@@ -166,9 +166,9 @@
   }
 
   function refreshLink(){
-    return t.card('id','idBoard').then(function(c){ cardId=c.id; cardBoardId=c.idBoard; return getLink(t, cardId); })
-      .then(function(link){ currentLink=link||null; })
-      .catch(function(){ currentLink=null; });
+    try { var ctx=t.getContext(); cardId=ctx.card; cardBoardId=ctx.board; } catch(e){}
+    if(!cardId) return Promise.resolve();
+    return getLink(t, cardId).then(function(link){ currentLink=link||null; }).catch(function(){ currentLink=null; });
   }
   /* ================= Inline-Sync (ohne Popup) ================= */
   function renderSyncBar(sb){
