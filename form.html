@@ -235,10 +235,8 @@
 
   function loadBoardsInline(status, body, sb){
     status.textContent='Lade Boards…';
-    t.card('id','idBoard').then(function(card){
-      startCtx=card;
-      return api(t,'GET','members/me/boards', { fields:'name', filter:'open' });
-    }).then(function(boards){
+    startCtx = { id: cardId, idBoard: cardBoardId };
+    api(t,'GET','members/me/boards', { fields:'name', filter:'open' }).then(function(boards){
       body.innerHTML='';
       var bf=el('div','field'); bf.style.marginBottom='10px'; bf.appendChild(el('label',null,'Zielboard'));
       var bsel=document.createElement('select'); bsel.appendChild(new Option('— wählen —',''));
@@ -264,7 +262,16 @@
         go.disabled=true; status.textContent='Erstelle synchronisierte Karte…';
         doCreateMirror(tb, tl, status, sb);
       });
-    }).catch(function(e){ status.textContent='Fehler beim Laden: '+e.message; });
+    }).catch(function(e){
+      var m=(e&&e.message)?e.message:String(e);
+      if(m.indexOf('401')>-1 || /invalid|unauthor/i.test(m)){
+        clearStoredToken();
+        showManualAuth(status, body, sb);
+        status.textContent='Der Zugriffscode wurde von Trello nicht akzeptiert. Bitte die Freigabe erneut durchführen und den Code exakt einfügen.';
+      } else {
+        status.textContent='Fehler beim Laden: '+m;
+      }
+    });
   }
 
   function doCreateMirror(targetBoard, targetList, status, sb){
