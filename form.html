@@ -171,7 +171,7 @@
     return getLink(t, cardId).then(function(link){ currentLink=link||null; }).catch(function(){ currentLink=null; });
   }
   /* ================= Inline-Sync (ohne Popup) ================= */
-  function renderSyncBar(sb){
+  function renderSyncBar(sb, statusMsg){
     sb.innerHTML='';
     sb.appendChild(el('div','syncbar-title','Karten-Sync'));
     var st=el('div','syncbar-text',''); 
@@ -191,6 +191,7 @@
       row2.appendChild(bStart); sb.appendChild(row2);
       bStart.addEventListener('click', function(){ startFlow(sb); });
     }
+    if(statusMsg){ st.textContent=statusMsg; }
     if(t.sizeTo) t.sizeTo('#app');
   }
 
@@ -336,25 +337,34 @@
     mapLabels(t, p.source.idLabels, p.source.idBoard, p.target.idBoard).then(function(tgt){
       return applyCore(t, p.targetId, p.source, tgt);
     }).then(function(){
+      st.textContent='Gleiche Kommentare ab…';
+      return syncComments(t, cardId, link.partner).catch(function(){});
+    }).then(function(){
       return Promise.all([ t.get('card','shared','projektdaten'), getRemoteForm(t, link.partner, pluginId) ]);
     }).then(function(forms){
       var mine=forms[0]||{}, partner=forms[1]||{};
       var mineT=mine._updatedAt||0, partnerT=partner._updatedAt||0;
       var now=new Date().toISOString();
-      setLink(t, cardId, { partner:link.partner, partnerBoard:link.partnerBoard, role:link.role, lastSyncAt:now });
-      setLink(t, link.partner, { partner:cardId, partnerBoard:cardBoardId, role:(link.role==='origin'?'mirror':'origin'), lastSyncAt:now });
-      if(currentLink) currentLink.lastSyncAt=now;
+      var partnerEntry={ partner:cardId, partnerBoard:cardBoardId, role:(link.role==='origin'?'mirror':'origin'), lastSyncAt:now };
+      var myEntry={ partner:link.partner, partnerBoard:link.partnerBoard, role:link.role, lastSyncAt:now };
       if(partnerT>mineT){
+        // Partner ist neuer -> in diese Karte übernehmen, danach Formular frisch anzeigen
+        setLink(t, cardId, myEntry); setLink(t, link.partner, partnerEntry);
+        if(currentLink){ currentLink.lastSyncAt=now; delete currentLink.pendingForm; }
         return t.set('card','shared','projektdaten', partner).then(function(){
-          data=partner; st.textContent='Abgeglichen ✓ Formulardaten übernommen. Aktualisiere…';
-          setTimeout(function(){ render(); }, 900);
+          data=partner; render();
         });
       } else {
-        st.textContent = (mineT>partnerT)
-          ? 'Abgeglichen ✓ Deine Formulardaten sind neuer – erscheinen drüben beim nächsten Abgleich.'
-          : 'Abgeglichen ✓';
+        // Diese Karte ist (gleich) neuer -> Projektdaten für die Partnerkarte hinterlegen
+        var msg='Abgeglichen ✓';
+        if(mineT>partnerT){
+          try { if(JSON.stringify(mine).length < 3500){ partnerEntry.pendingForm = mine; msg='Abgeglichen ✓ (Projektdaten wandern mit, sobald die andere Karte geöffnet/abgeglichen wird)'; } } catch(e){}
+        }
+        setLink(t, cardId, myEntry); setLink(t, link.partner, partnerEntry);
+        if(currentLink){ currentLink.lastSyncAt=now; delete currentLink.pendingForm; }
+        renderSyncBar(sb, msg);
       }
-    }).catch(function(e){ st.textContent='Fehler beim Abgleich: '+e.message; });
+    }).catch(function(e){ renderSyncBar(sb, 'Fehler beim Abgleich: '+e.message); });
   }
 
   function confirmStop(sb, row, st){
@@ -380,14 +390,27 @@
   }
   function maybeAutoPull(){
     if(!currentLink || !currentLink.partner) return;
-    if(!isFormEmpty(data)) return;
-    if(keyMissing() || !getStoredToken()) return;
-    var pluginId; try { pluginId=t.getContext().plugin; } catch(e){ return; }
-    getRemoteForm(t, currentLink.partner, pluginId).then(function(pf){
-      if(pf && !isFormEmpty(pf)){
-        t.set('card','shared','projektdaten', pf).then(function(){ data=pf; render(); });
-      }
-    }).catch(function(){});
+    var mineT = (data && data._updatedAt) || 0;
+    // 1) Hinterlegte Projektdaten anwenden (kein Token/REST nötig)
+    if(currentLink.pendingForm && (currentLink.pendingForm._updatedAt||0) > mineT){
+      var pf = currentLink.pendingForm;
+      t.set('card','shared','projektdaten', pf).then(function(){
+        data=pf;
+        setLink(t, cardId, { partner:currentLink.partner, partnerBoard:currentLink.partnerBoard, role:currentLink.role, lastSyncAt:currentLink.lastSyncAt });
+        if(currentLink) delete currentLink.pendingForm;
+        render();
+      });
+      return;
+    }
+    // 2) Falls hier noch nichts ausgefüllt ist: direkt von der Partnerkarte holen (Token nötig)
+    if(isFormEmpty(data) && !keyMissing() && getStoredToken()){
+      var pluginId; try { pluginId=t.getContext().plugin; } catch(e){ return; }
+      getRemoteForm(t, currentLink.partner, pluginId).then(function(pf){
+        if(pf && !isFormEmpty(pf)){
+          t.set('card','shared','projektdaten', pf).then(function(){ data=pf; render(); });
+        }
+      }).catch(function(){});
+    }
   }
   function init(){
     Promise.all([ loadConfig(t), loadCardData(t), refreshLink() ]).then(function(res){

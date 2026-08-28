@@ -100,10 +100,28 @@ function getRemoteForm(t, cardId, pluginId){
 
 /* Verbindung trennen (beide Register-Einträge entfernen) */
 function stopSync(t){
-  return t.card('id').then(function(c){
-    return getLink(t, c.id).then(function(link){
-      if(!link) return;
-      return removeLink(t, c.id).then(function(){ if(link.partner) return removeLink(t, link.partner); });
-    });
+  var id; try { id=t.getContext().card; } catch(e){}
+  if(!id) return Promise.resolve();
+  return getLink(t, id).then(function(link){
+    if(!link) return;
+    return removeLink(t, id).then(function(){ if(link.partner) return removeLink(t, link.partner); });
+  });
+}
+
+/* --- Kommentare (Best-Effort, Dedup per Text) --- */
+function getComments(t, cardId){
+  return api(t,'GET','cards/'+cardId+'/actions', { filter:'commentCard', limit:50 }).then(function(list){
+    return (list||[]).map(function(a){ return (a.data && a.data.text) || ''; }).filter(function(x){ return x; });
+  });
+}
+function postComment(t, cardId, text){
+  return api(t,'POST','cards/'+cardId+'/actions/comments', { text:text });
+}
+function syncComments(t, aId, bId){
+  return Promise.all([ getComments(t,aId), getComments(t,bId) ]).then(function(res){
+    var aT=res[0]||[], bT=res[1]||[], ops=[];
+    aT.forEach(function(txt){ if(bT.indexOf(txt)<0) ops.push(postComment(t,bId,txt)); });
+    bT.forEach(function(txt){ if(aT.indexOf(txt)<0) ops.push(postComment(t,aId,txt)); });
+    return Promise.all(ops);
   });
 }
