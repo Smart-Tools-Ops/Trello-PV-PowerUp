@@ -197,6 +197,8 @@
   function keyMissing(){ return !APP_KEY || APP_KEY.indexOf('HIER_DEINEN')===0; }
 
   function startFlow(sb){
+    if(keyMissing()){ sb.innerHTML=''; sb.appendChild(el('div','syncbar-title','Karte synchronisieren')); sb.appendChild(el('div','syncbar-text','Es ist kein API-Key in config.js hinterlegt.')); var cx=el('button','btn btn-ghost','Zurück'); cx.addEventListener('click',function(){renderSyncBar(sb);}); sb.appendChild(cx); return; }
+    if(!getStoredToken()){ renderAuthPanel(sb, function(){ startFlow(sb); }); return; }
     sb.innerHTML='';
     sb.appendChild(el('div','syncbar-title','Karte synchronisieren'));
     var status=el('div','syncbar-text','Einen Moment…'); sb.appendChild(status);
@@ -205,31 +207,32 @@
     cancel.addEventListener('click', function(){ renderSyncBar(sb); });
     sb.appendChild(cancel);
     if(t.sizeTo) t.sizeTo('#app');
-
-    if(keyMissing()){ status.textContent='Es ist kein API-Key in config.js hinterlegt.'; return; }
-    if(getStoredToken()){ loadBoardsInline(status, body, sb); }
-    else { showManualAuth(status, body, sb); }
+    loadBoardsInline(status, body, sb);
   }
 
-  function showManualAuth(status, body, sb){
-    body.innerHTML='';
-    status.textContent='Einmalige Freigabe nötig:';
+  function renderAuthPanel(sb, onAuthed){
+    sb.innerHTML='';
+    sb.appendChild(el('div','syncbar-title','Trello-Freigabe'));
+    var status=el('div','syncbar-text','Einmalige Freigabe nötig:'); sb.appendChild(status);
     var steps=el('div','syncbar-text','');
-    steps.innerHTML='1. Auf „Trello-Freigabe öffnen" klicken (neuer Tab). &nbsp; 2. Dort auf „Zulassen/Allow" klicken. &nbsp; 3. Den angezeigten Code kopieren und unten einfügen.';
-    steps.style.marginBottom='8px'; body.appendChild(steps);
+    steps.innerHTML='1. „Trello-Freigabe öffnen" (neuer Tab). &nbsp; 2. Dort „Zulassen/Allow". &nbsp; 3. Den angezeigten Code kopieren und unten einfügen.';
+    steps.style.margin='6px 0'; sb.appendChild(steps);
     var open=el('button','btn btn-ghost','Trello-Freigabe öffnen'); open.style.marginBottom='10px';
     open.addEventListener('click', function(){ window.open(authorizeUrl(), '_blank'); });
-    body.appendChild(open);
+    sb.appendChild(open);
     var f=el('div','field'); f.style.marginBottom='10px'; f.appendChild(el('label',null,'Code hier einfügen'));
-    var inp=document.createElement('input'); inp.type='text'; inp.placeholder='Code aus dem Trello-Tab'; f.appendChild(inp); body.appendChild(f);
-    var save=el('button','btn btn-primary','Code speichern'); body.appendChild(save);
+    var inp=document.createElement('input'); inp.type='text'; inp.placeholder='Code aus dem Trello-Tab'; f.appendChild(inp); sb.appendChild(f);
+    var row=el('div','syncbar-btns');
+    var save=el('button','btn btn-primary','Code speichern');
+    var cancel=el('button','btn btn-ghost','Abbrechen');
+    row.appendChild(save); row.appendChild(cancel); sb.appendChild(row);
     if(t.sizeTo) t.sizeTo('#app');
+    cancel.addEventListener('click', function(){ renderSyncBar(sb); });
     save.addEventListener('click', function(){
       var tok=(inp.value||'').trim();
       if(!tok){ status.textContent='Bitte den Code einfügen.'; return; }
-      status.textContent='Speichere Code…';
-      if(!setStoredToken(tok)){ status.textContent='Browser-Speicher blockiert. Bitte Website-Daten/Cookies für diese Seite erlauben und erneut versuchen.'; return; }
-      body.innerHTML=''; loadBoardsInline(status, body, sb);
+      if(!setStoredToken(tok)){ status.textContent='Browser-Speicher blockiert. Bitte Website-Daten/Cookies für diese Seite erlauben.'; return; }
+      onAuthed();
     });
   }
 
@@ -275,33 +278,36 @@
   }
 
   function doCreateMirror(targetBoard, targetList, status, sb){
-    getCore(t, startCtx.id).then(function(cur){
+    var srcId = (startCtx && startCtx.id) || null;
+    var srcBoard = (startCtx && startCtx.idBoard) || cardBoardId || null;
+    try { var c=t.getContext(); if(!srcId) srcId=c.card; if(!srcBoard) srcBoard=c.board; } catch(e){}
+    if(!srcId){ status.textContent='Fehler: Karten-ID konnte nicht ermittelt werden.'; return; }
+    getCore(t, srcId).then(function(cur){
       startSource=cur;
-      return api(t,'POST','cards', { idList:targetList, name:cur.name||'', desc:cur.desc||'', due:cur.due||'' });
+      var params={ idList:targetList, name:cur.name||'', desc:cur.desc||'' };
+      if(cur.due) params.due=cur.due;
+      return api(t,'POST','cards', params);
     }).then(function(newCard){
       var mid=newCard.id;
-      return mapLabels(t, startSource.idLabels, startSource.idBoard, targetBoard).then(function(tgt){
+      return mapLabels(t, startSource.idLabels, srcBoard, targetBoard).then(function(tgt){
         var p = tgt.length ? api(t,'PUT','cards/'+mid, { idLabels: tgt.join(',') }) : Promise.resolve();
         return p.then(function(){
           var now=new Date().toISOString();
           return Promise.all([
-            setLink(t, startCtx.id, { partner:mid, partnerBoard:targetBoard, role:'origin', lastSyncAt:now }),
-            setLink(t, mid, { partner:startCtx.id, partnerBoard:startCtx.idBoard, role:'mirror', lastSyncAt:now })
+            setLink(t, srcId, { partner:mid, partnerBoard:targetBoard, role:'origin', lastSyncAt:now }),
+            setLink(t, mid, { partner:srcId, partnerBoard:srcBoard, role:'mirror', lastSyncAt:now })
           ]);
         });
       });
     }).then(function(){
       status.textContent='Fertig! Karte gespiegelt.';
       refreshLink().then(function(){ renderSyncBar(sb); });
-    }).catch(function(e){ status.textContent='Fehler: '+e.message; });
+    }).catch(function(e){ status.textContent='Fehler: '+e.message+'  [Karte: '+srcId+' | Liste: '+targetList+']'; });
   }
 
   function runSync(sb, bSync, bStop, st){
     if(keyMissing()){ st.textContent='Es ist kein API-Key in config.js hinterlegt.'; return; }
-    if(!getStoredToken()){
-      st.textContent='Einmalige Freigabe nötig – bitte „Synchronisation starten" öffnen und den Code eintragen.';
-      return;
-    }
+    if(!getStoredToken()){ renderAuthPanel(sb, function(){ renderSyncBar(sb); }); return; }
     bSync.disabled=true; bStop.disabled=true; st.textContent='Prüfe…';
     var pluginId=t.getContext().plugin, link=currentLink;
     Promise.all([ getCore(t, cardId), getCore(t, link.partner) ]).then(function(cores){
@@ -368,10 +374,26 @@
     });
   }
 
+  function isFormEmpty(d){
+    if(!d) return true;
+    return Object.keys(d).every(function(k){ return k==='_updatedAt' || d[k]==='' || d[k]==null; });
+  }
+  function maybeAutoPull(){
+    if(!currentLink || !currentLink.partner) return;
+    if(!isFormEmpty(data)) return;
+    if(keyMissing() || !getStoredToken()) return;
+    var pluginId; try { pluginId=t.getContext().plugin; } catch(e){ return; }
+    getRemoteForm(t, currentLink.partner, pluginId).then(function(pf){
+      if(pf && !isFormEmpty(pf)){
+        t.set('card','shared','projektdaten', pf).then(function(){ data=pf; render(); });
+      }
+    }).catch(function(){});
+  }
   function init(){
     Promise.all([ loadConfig(t), loadCardData(t), refreshLink() ]).then(function(res){
       config=res[0]; data=res[1] || {};
       render();
+      maybeAutoPull();
     });
   }
 
