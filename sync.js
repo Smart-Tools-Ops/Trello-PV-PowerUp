@@ -125,3 +125,23 @@ function syncComments(t, aId, bId){
     return Promise.all(ops);
   });
 }
+
+/* --- Anhänge (Best-Effort: als Link-Verweis, Dedup per URL) --- */
+function getAttachments(t, cardId){
+  return api(t,'GET','cards/'+cardId+'/attachments', { fields:'name,url' }).then(function(list){
+    return (list||[]).map(function(a){ return { name:a.name||'', url:a.url||'' }; }).filter(function(a){ return a.url; });
+  });
+}
+function postAttachment(t, cardId, att){
+  return api(t,'POST','cards/'+cardId+'/attachments', { url:att.url, name:att.name });
+}
+function syncAttachments(t, aId, bId){
+  return Promise.all([ getAttachments(t,aId), getAttachments(t,bId) ]).then(function(res){
+    var a=res[0]||[], b=res[1]||[];
+    var aUrls=a.map(function(x){return x.url;}), bUrls=b.map(function(x){return x.url;});
+    var ops=[];
+    a.forEach(function(x){ if(bUrls.indexOf(x.url)<0) ops.push(postAttachment(t,bId,x).catch(function(){})); });
+    b.forEach(function(x){ if(aUrls.indexOf(x.url)<0) ops.push(postAttachment(t,aId,x).catch(function(){})); });
+    return Promise.all(ops);
+  });
+}

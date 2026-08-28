@@ -57,6 +57,8 @@ var ECKDATEN_FIELDS = [
   { key:'ziegelmasse',          label:'Ziegelmaße',                   width:25 },
   { key:'ziegelart',            label:'Ziegelart',                    width:33 },
   { key:'zweite_ebene',         label:'Zweite wasserführende Ebene',  width:33 },
+  { key:'dachneigung',          label:'Dachneigung',                  width:25 },
+  { key:'hausmasse',            label:'Hausmaße',                     width:25 },
   { key:'strompreis',           label:'Strompreis',                   width:33 },
   { key:'netzbetreiber',        label:'Netzbetreiber',                width:33 },
   { key:'jahresverbrauch',      label:'Jahres Verbrauch',             width:33 },

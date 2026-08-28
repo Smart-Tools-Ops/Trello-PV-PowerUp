@@ -58,11 +58,6 @@
   function render(){
     var app=document.getElementById('app'); app.innerHTML='';
 
-    // ---- Sync-Leiste (inline, ohne Popup) ----
-    var sb=el('div','syncbar');
-    app.appendChild(sb);
-    renderSyncBar(sb);
-
     // Kopf mit Master-Collapse
     var head=el('div','head');
     head.appendChild(el('span','icon','▤'));
@@ -143,6 +138,11 @@
     saveBtn.addEventListener('click', doSave);
     bar.appendChild(saveBtn); bar.appendChild(statusEl);
     app.appendChild(bar);
+
+    // ---- Sync-Leiste (unten) ----
+    var sb=el('div','syncbar'); sb.style.marginTop='14px'; sb.style.marginBottom='0';
+    app.appendChild(sb);
+    renderSyncBar(sb);
 
     t.sizeTo('#app');
   }
@@ -283,23 +283,29 @@
     var srcBoard = (startCtx && startCtx.idBoard) || cardBoardId || null;
     try { var c=t.getContext(); if(!srcId) srcId=c.card; if(!srcBoard) srcBoard=c.board; } catch(e){}
     if(!srcId){ status.textContent='Fehler: Karten-ID konnte nicht ermittelt werden.'; return; }
+    var mirrorId=null;
     getCore(t, srcId).then(function(cur){
       startSource=cur;
       var params={ idList:targetList, name:cur.name||'', desc:cur.desc||'' };
       if(cur.due) params.due=cur.due;
       return api(t,'POST','cards', params);
     }).then(function(newCard){
-      var mid=newCard.id;
+      mirrorId=newCard.id;
       return mapLabels(t, startSource.idLabels, srcBoard, targetBoard).then(function(tgt){
-        var p = tgt.length ? api(t,'PUT','cards/'+mid, { idLabels: tgt.join(',') }) : Promise.resolve();
+        var p = tgt.length ? api(t,'PUT','cards/'+mirrorId, { idLabels: tgt.join(',') }) : Promise.resolve();
         return p.then(function(){
           var now=new Date().toISOString();
           return Promise.all([
-            setLink(t, srcId, { partner:mid, partnerBoard:targetBoard, role:'origin', lastSyncAt:now }),
-            setLink(t, mid, { partner:srcId, partnerBoard:srcBoard, role:'mirror', lastSyncAt:now })
+            setLink(t, srcId, { partner:mirrorId, partnerBoard:targetBoard, role:'origin', lastSyncAt:now }),
+            setLink(t, mirrorId, { partner:srcId, partnerBoard:srcBoard, role:'mirror', lastSyncAt:now })
           ]);
         });
       });
+    }).then(function(){
+      status.textContent='Übertrage Kommentare & Anhänge…';
+      return syncComments(t, srcId, mirrorId).catch(function(){});
+    }).then(function(){
+      return syncAttachments(t, srcId, mirrorId).catch(function(){});
     }).then(function(){
       status.textContent='Fertig! Karte gespiegelt.';
       refreshLink().then(function(){ renderSyncBar(sb); });
@@ -339,6 +345,9 @@
     }).then(function(){
       st.textContent='Gleiche Kommentare ab…';
       return syncComments(t, cardId, link.partner).catch(function(){});
+    }).then(function(){
+      st.textContent='Gleiche Anhänge ab…';
+      return syncAttachments(t, cardId, link.partner).catch(function(){});
     }).then(function(){
       return Promise.all([ t.get('card','shared','projektdaten'), getRemoteForm(t, link.partner, pluginId) ]);
     }).then(function(forms){
