@@ -48,8 +48,8 @@
   function collapseRow(headingText, targetBuilder){
     var row=el('div','section-heading-row');
     row.appendChild(el('h2','section-heading',headingText));
-    var btn=el('button','collapse-btn','▾'); btn.title='Ein-/ausklappen'; row.appendChild(btn);
-    var body=el('div','collapsible');
+    var btn=el('button','collapse-btn collapsed','▾'); btn.title='Ein-/ausklappen'; row.appendChild(btn);
+    var body=el('div','collapsible collapsed');
     targetBuilder(body);
     btn.addEventListener('click', function(){ var c=body.classList.toggle('collapsed'); btn.classList.toggle('collapsed',c); t.sizeTo('#app'); });
     return [row, body];
