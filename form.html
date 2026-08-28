@@ -14,6 +14,7 @@
 <script src="./sync.js"></script>
 <script>
   var t = TrelloPowerUp.iframe({ appKey: APP_KEY, appName: APP_NAME });
+  function resize(){ if(t && t.sizeTo){ requestAnimationFrame(function(){ t.sizeTo('#app'); }); } }
   var config = null, data = {}, dirty = false, statusEl = null, saveBtn = null;
   var cardId = null, cardBoardId = null, currentLink = null;
   var startCtx = null, startSource = null;
@@ -51,7 +52,7 @@
     var btn=el('button','collapse-btn collapsed','▾'); btn.title='Ein-/ausklappen'; row.appendChild(btn);
     var body=el('div','collapsible collapsed');
     targetBuilder(body);
-    btn.addEventListener('click', function(){ var c=body.classList.toggle('collapsed'); btn.classList.toggle('collapsed',c); t.sizeTo('#app'); });
+    btn.addEventListener('click', function(){ var c=body.classList.toggle('collapsed'); btn.classList.toggle('collapsed',c); resize(); });
     return [row, body];
   }
 
@@ -66,7 +67,7 @@
     app.appendChild(head);
 
     var content=el('div','body');
-    masterBtn.addEventListener('click', function(){ var c=content.classList.toggle('collapsed'); masterBtn.classList.toggle('collapsed',c); t.sizeTo('#app'); });
+    masterBtn.addEventListener('click', function(){ var c=content.classList.toggle('collapsed'); masterBtn.classList.toggle('collapsed',c); resize(); });
 
     // ---- Personalien ----
     var pers=collapseRow(config.headings.personalien || 'Personalien', function(body){
@@ -144,7 +145,7 @@
     app.appendChild(sb);
     renderSyncBar(sb);
 
-    t.sizeTo('#app');
+    resize();
   }
 
   function buildPersField(f){
@@ -192,7 +193,7 @@
       bStart.addEventListener('click', function(){ startFlow(sb); });
     }
     if(statusMsg){ st.textContent=statusMsg; }
-    if(t.sizeTo) t.sizeTo('#app');
+    resize();
   }
 
   function keyMissing(){ return !APP_KEY || APP_KEY.indexOf('HIER_DEINEN')===0; }
@@ -207,7 +208,7 @@
     var cancel=el('button','btn btn-ghost','Abbrechen'); cancel.style.marginTop='10px';
     cancel.addEventListener('click', function(){ renderSyncBar(sb); });
     sb.appendChild(cancel);
-    if(t.sizeTo) t.sizeTo('#app');
+    resize();
     loadBoardsInline(status, body, sb);
   }
 
@@ -227,7 +228,7 @@
     var save=el('button','btn btn-primary','Code speichern');
     var cancel=el('button','btn btn-ghost','Abbrechen');
     row.appendChild(save); row.appendChild(cancel); sb.appendChild(row);
-    if(t.sizeTo) t.sizeTo('#app');
+    resize();
     cancel.addEventListener('click', function(){ renderSyncBar(sb); });
     save.addEventListener('click', function(){
       var tok=(inp.value||'').trim();
@@ -251,7 +252,7 @@
       lf.appendChild(lsel); body.appendChild(lf);
       var go=el('button','btn btn-primary','Synchronisieren'); body.appendChild(go);
       status.textContent='Wohin soll die Karte gespiegelt werden?';
-      if(t.sizeTo) t.sizeTo('#app');
+      resize();
       bsel.addEventListener('change', function(){
         var bid=bsel.value; lsel.innerHTML='<option value="">— lädt… —</option>';
         if(!bid){ lsel.innerHTML='<option value="">— zuerst Board wählen —</option>'; return; }
@@ -329,7 +330,7 @@
         var yes=el('button','btn btn-primary','Trotzdem übernehmen');
         var no=el('button','btn btn-ghost','Abbrechen');
         cw.appendChild(yes); cw.appendChild(no); st.parentNode.appendChild(cw);
-        if(t.sizeTo) t.sizeTo('#app');
+        resize();
         yes.addEventListener('click', function(){ cw.remove(); applySync(pending, pluginId, link, st, sb); });
         no.addEventListener('click', function(){ cw.remove(); bSync.disabled=false; bStop.disabled=false; st.textContent=''; });
       } else {
@@ -384,7 +385,7 @@
     var yes=el('button','btn btn-primary','Ja, trennen');
     var no=el('button','btn btn-ghost','Abbrechen');
     b.appendChild(yes); b.appendChild(no); cw.appendChild(b); sb.appendChild(cw);
-    if(t.sizeTo) t.sizeTo('#app');
+    resize();
     no.addEventListener('click', function(){ cw.remove(); row.style.display=''; });
     yes.addEventListener('click', function(){
       st.textContent='Trenne…';
@@ -429,7 +430,7 @@
     });
   }
 
-  t.render(function(){ t.sizeTo('#app'); });
+  t.render(function(){ resize(); });
   init();
 </script>
 </body>
